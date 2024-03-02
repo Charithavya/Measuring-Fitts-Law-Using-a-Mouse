@@ -1,0 +1,347 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitts' Law Experiment</title>
+<style>
+    
+    body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Screens */
+#startScreen, #trialScreen, #completionScreen, #resultScreen {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+/* Paragraphs in Screens */
+#trialScreen p, #completionScreen p, #resultScreen p {
+    margin-bottom: 20px;
+}
+
+/* Buttons */
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+/* Squares */
+.square {
+    width: 100px;
+    height: 100px;
+    text-align: center;
+    line-height: 100px;
+    font-size: 18px;
+    color: white;
+    margin: 20px;
+    cursor: pointer;  
+}
+
+#leftSquare {
+    background-color: #435E55FF; /* Adjusted color */
+}
+
+#rightSquare {
+    background-color: rgba(29, 57, 185, 0.529); /* Adjusted color */
+}
+
+/* Hidden class */
+.hidden {
+    display: none;
+}
+
+/* Result TextArea */
+#resultTextArea {
+    width: 80%;
+    height: 250px;
+    margin-bottom: 20px;
+    resize: none;
+    font-family: Arial, sans-serif; 
+    font-size: 14px;
+}
+
+/* Result Screen Button */
+#resultScreen button {
+    margin-top: 20px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Chart */
+#completionChart {
+
+    max-width: 600px;
+    max-height: 400px; 
+    margin-top: 20px;
+    margin-left:460px;
+    margin-bottom:20px;
+}
+.canvas-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+
+</style>  
+<!-- Include Chart.js library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="startScreen">
+        <p>Click 'Start' to begin the experiment.</p>
+        <button onclick="startExperiment()">Start</button>
+    </div>
+ 
+    <div id="trialScreen" class="hidden"> 
+        <p id="trialInstructions"></p>
+        <b><p id="currentTrialNumber"></p></b>
+        <button onclick="startTrial()">Start Trial</button>
+    </div>
+
+    <div id="completionScreen" class="hidden">
+        <canvas id="completionChart"  width="400" height="300" class="center"></canvas>
+        <p>Experiment  completed! Click 'Restart Experiment' to continue.</p>
+        <p id="currentTrialNumber"></p>
+        
+    </div>    
+            
+    <div id="resultScreen" class="hidden">
+        <b><h2>Trial Results:</h2></b> 
+        <textarea id="resultTextArea" rows="20" cols="50"></textarea>
+        <button  onclick="showNextTrialScreen()">Next Trial</button>
+    </div>   
+    
+    <script>
+        let results = [];
+        const index_of_difficulties = [2, 3, 4, 5, 6];
+        const trials_per_condition = 2; // Number of trials per difficulty level
+        const actions_per_trial = 30;
+        let trialCounter = 0;  
+        let currentTrialIndex = 0;     
+        let clicks = [];
+
+        // Define width and distance combinations for each difficulty level
+        const width_distance_combinations = {
+            2: [{ width: 100, distance: 200 }, { width: 120, distance: 250 }, { width: 150, distance: 300 }],
+            3: [{ width: 90, distance: 360 }, { width: 110, distance: 440 }, { width: 140, distance: 560 }],
+            4: [{ width: 80, distance: 640 }, { width: 100, distance: 800 }, { width: 130, distance: 1040 }],
+            5: [{ width: 70, distance: 1120 }, { width: 90, distance: 1440 }, { width: 120, distance: 1920 }],
+            6: [{ width: 60, distance: 1920 }, { width: 80, distance: 2560 }, { width: 110, distance: 3520 }]
+        };
+ 
+        function startExperiment() {
+            document.getElementById("startScreen").style.display = "none";
+            document.getElementById("trialScreen").style.display = "block";
+            runNextTrial();
+        }
+
+        function runNextTrial() {
+            if (currentTrialIndex < index_of_difficulties.length * trials_per_condition) {
+                let difficulty = index_of_difficulties[Math.floor(currentTrialIndex / trials_per_condition)];
+                let trialIndex = currentTrialIndex % trials_per_condition;
+                let widthDistanceComb = width_distance_combinations[difficulty][trialIndex];
+                document.getElementById("trialInstructions").innerText = `Trial ${currentTrialIndex + 1}: Click inside the left square, then alternate clicks between the squares as fast as possible for 10 times.`;
+                document.getElementById("currentTrialNumber").innerText = `Trial ${currentTrialIndex + 1}`;
+                document.getElementById("trialScreen").style.display = "block";
+                document.getElementById("completionScreen").style.display = "none";
+                document.getElementById("resultScreen").style.display = "none";
+                clicks = [];
+                currentTrialIndex++;    
+            } else {
+                displayCompletionScreen();  
+            }
+        }
+
+        function startTrial() {
+            document.getElementById("trialScreen").style.display = "none";
+            let difficulty = index_of_difficulties[Math.floor((currentTrialIndex - 1) / trials_per_condition)];
+            let widthDistanceComb = width_distance_combinations[difficulty][(currentTrialIndex - 1) % trials_per_condition];
+            runTrial(difficulty, widthDistanceComb.width, widthDistanceComb.distance);
+        }
+
+        function runTrial(difficulty, width, distance) {
+            let trialFrame = document.createElement("div");
+            trialFrame.classList.add("trialFrame");
+
+            let leftSquare = document.createElement("div");
+            leftSquare.classList.add("square");
+            leftSquare.id = "leftSquare";
+            leftSquare.style.width = width + "px";  
+            leftSquare.style.marginRight = distance + "px";
+            leftSquare.addEventListener("click", function() {
+                recordClick(difficulty, width, distance);
+            });
+
+            let rightSquare = document.createElement("div");
+            rightSquare.classList.add("square");
+            rightSquare.id = "rightSquare";
+            rightSquare.style.width = width + "px";
+            rightSquare.style.marginLeft = distance + "px";
+            rightSquare.addEventListener("click", function() {
+                recordClick(difficulty, width, distance);
+            });
+
+            trialFrame.appendChild(leftSquare);
+            trialFrame.appendChild(rightSquare);
+            document.body.appendChild(trialFrame);
+        }
+
+        function recordClick(difficulty, width, distance) {
+            let clickTime = performance.now();
+            clicks.push(clickTime);
+            if (clicks.length === actions_per_trial) {
+                let trialResults = [];
+                let totalTime = 0; // Initialize total time for the trial
+                for (let i = 0; i < clicks.length - 1; i++) {
+                    let timeDiff = (clicks[i + 1] - clicks[i]) / 1000; // Convert to seconds
+                    trialResults.push(timeDiff);
+                    totalTime += timeDiff; // Accumulate total time
+                }
+                trialResults.unshift(0); // Include zero time for the first click
+                let averageTime = totalTime / (actions_per_trial - 1); // Calculate average time
+                results.push({
+                    difficulty: difficulty,
+                    trial: currentTrialIndex,
+                    width: width,
+                    distance: distance,
+                    clickTimes: trialResults,
+                    averageTime: averageTime // Store average time for the trial
+                });
+                document.body.removeChild(document.getElementById("leftSquare").parentNode);
+                displayResultScreen();
+            }
+        }
+
+        function displayCompletionScreen() {
+            document.getElementById("trialScreen").style.display = "none";
+            document.getElementById("completionScreen").style.display = "block";
+            document.getElementById("currentTrialNumber").innerText = `Trial ${currentTrialIndex}`;
+            if (currentTrialIndex === index_of_difficulties.length * trials_per_condition) {
+                showRestartButton();
+                generateGraph();
+            }
+        }
+
+        function showRestartButton() {
+            // Check if the button already exists
+            if (!document.getElementById("restartButton")) {
+                let restartButton = document.createElement("button");
+                restartButton.id = "restartButton";
+                restartButton.innerText = "Restart Experiment";
+                restartButton.onclick = function() {
+                    document.getElementById("startScreen").style.display = "block";
+                    currentTrialIndex = 0;
+                    results = [];
+                };
+                document.getElementById("completionScreen").appendChild(restartButton);
+            }
+        }  
+
+        function displayResultScreen() {
+            document.getElementById("trialScreen").style.display = "none";
+            document.getElementById("resultScreen").style.display = "block";
+            let resultTextArea = document.getElementById("resultTextArea");
+            resultTextArea.value = "Trial Results:\n";
+
+            // Get the index of the last recorded trial
+            const lastIndex = results.length - 1;
+            const lastResult = results[lastIndex];
+
+            // Display results of the last trial only
+            resultTextArea.value += `Difficulty: ${lastResult.difficulty}\n`;
+            resultTextArea.value += `Trial: ${lastResult.trial}\n`;
+            resultTextArea.value += `Width: ${lastResult.width}px\n`;
+            resultTextArea.value += `Distance: ${lastResult.distance}px\n`;
+
+            // Display click times of the last trial
+            lastResult.clickTimes.forEach((clickTime, index) => {
+                resultTextArea.value += `Click ${index + 1}: ${clickTime.toFixed(2)}s\n`;
+            });
+        }
+
+        function showNextTrialScreen() {
+            document.getElementById("resultScreen").style.display = "none";
+            runNextTrial();
+        }
+
+        function generateGraph() {
+            let difficultyLevels = [];
+            let averageTimes = [];
+
+            // Extract difficulty levels and average times from results
+            results.forEach(result => {
+                difficultyLevels.push(result.difficulty);
+                averageTimes.push(result.averageTime);
+            });
+
+            // Create a new Chart.js instance for completion screen
+            let ctx = document.getElementById('completionChart').getContext('2d');
+            let completionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: difficultyLevels,
+                    datasets: [{
+                        label: 'Average Movement Time',
+                        data: averageTimes,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {  
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Index of Difficulty'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Average Movement Time (seconds)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Relationship Between Index of Difficulty and Average Movement Time',
+                            font: {
+                                size: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+  
